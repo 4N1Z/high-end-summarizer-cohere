@@ -1,0 +1,5 @@
+#Generate a gitignore file for python streamlit# FILEPATH: /D:/Project/LLM/COHERE/summarizer/.gitignore
+
+# Python Streamlit
+__pycache__/
+.secrets.toml

@@ -1,0 +1,1524 @@
+1
+PG-VTON: A Novel Image-Based Virtual Try-On
+Method via Progressive Inference Paradigm
+Naiyu Fang ID Student Member, IEEE, Lemiao Qiu ID Member, IEEE, Shuyou Zhang, Zili Wang ID Member, IEEE,
+Kerui Hu ID
+Abstract—Virtual try-on is a promising computer vision topic
+with a high commercial value wherein a new garment is visually worn on a person with a photo-realistic effect. Previous
+studies conduct their shape and content inference at one stage,
+employing a single-scale warping mechanism and a relatively
+unsophisticated content inference mechanism. These approaches
+have led to suboptimal results in terms of garment warping and
+skin reservation under challenging try-on scenarios. To address
+these limitations, we propose a novel virtual try-on method via
+progressive inference paradigm (PGVTON) that leverages a topdown inference pipeline and a general garment try-on strategy.
+Specifically, we propose a robust try-on parsing inference method
+by disentangling semantic categories and introducing consistency.
+Exploiting the try-on parsing as the shape guidance, we implement the garment try-on via warping-mapping-composition.
+To facilitate adaptation to a wide range of try-on scenarios,
+we adopt a covering more and selecting one warping strategy
+and explicitly distinguish tasks based on alignment. Additionally,
+we regulate StyleGAN2 to implement re-naked skin inpainting,
+conditioned on the target skin shape and spatial-agnostic skin
+features. Experiments demonstrate that our method has state-ofthe-art performance under two challenging scenarios. The code
+will be available at https://github.com/NerdFNY/PGVTON.
+Index Terms—Virtual try-on, PG-VTON, Garment warping,
+Skin inpainting, Vision Transformer.
+I. INTRODUCTION
+V
+IRTUAL try-on is a promising topic for commercial
+applications in computer vision. The image-based virtual
+try-on has no requirements for professional 3d modeling of
+the person [1, 2] and garment [3]. It still preset a photorealistic wearing effect only conditioned on the person and
+garment image. However, as the variability of person and
+garment increases, the content inference and garment warping
+employed in previous studies have encountered challenges
+when faced with difficult try-on scenarios. In this paper, we
+propose a progressive inference paradigm of virtual try-on
+and employ advanced strategies of garment try-on and skin
+inpainting to enhance the try-on realism even in the presence
+of distinct garment categories or complex poses.
+The objective of virtual try-on is to manipulate the shape
+of a new garment and wear it on a person, which involves
+This work has been submitted to the IEEE for possible publication.
+Copyright may be transferred without notice, after which this version may
+no longer be accessible.
+This work was supported in part by the National Key R&D Program of
+China (No. 2018YFB1700700). (Corresponding authors: Lemiao Qiu)
+The authors are with State Key Laboratory of Fluid Power & Mechatronic
+Systems, Zhejiang University, Hangzhou, 310027, China (e-mail: FangNaiyu@zju.edu.cn; qiulm@zju.edu.cn; zsy@zju.edu.cn; ziliwang@zju.edu.cn;
+hkr457@zju.edu.cn )
+several challenging techniques such as image warping, image
+inpainting, and image fusion. In the nascent stages of this field,
+Han X et al. and Wang B et al. provided two distinct pipelines
+to achieve this aim. VITON [4] proposed by Han X et al. first
+synthesized a coarse result conditioned on garment image and
+person representation and then warped the garment by TPS
+deformation to refine the result. CP-VTON [5] proposed by
+Wang B et al. firstly regressed TPS coefficients to obtain a
+coarse result and then synthesized a rendered person according
+to the coarse result and the person representations.
+These two pipelines have a significant inspiration for subsequent studies. However, their try-on effects have not been
+satisfactory due to the unrealistic performance in the garment
+and body. The garment try-on task involves modifying the
+shape of a garment to the desired form while preserving its
+original style and category. Meanwhile, since the garment tryon affects the representation of the body, it is crucial that
+the inferred body maintains reasonable content and structure.
+To address this issue, numerous researchers have contributed
+to preserving garment texture and body features. Yu R et
+al. [6] proposed a new image synthesis network to preserve
+garment and body part details. Yang H et al. [7] introduced
+second-order constraints into TPS deformation and implemented layout adaptation by a content fusion module. Minar
+M R et al. [8] proposed CP-VTON+ to adjust inputs and
+refine semantic categories based on CP-VTON. Neuberger
+A et al. [9] proposed O-VITON and refined the appearance
+through online optimization. Ge C et al. [10] introduced cycle
+consistency into the self-supervised training and disentangled
+the garment and non-garment regions. He S et al. [11] and
+Bai S et al [12] proposed Flow-Style and DAFlow to warp
+garments by estimating the flow.
+The comprehensive research of virtual try-on emerges endlessly, such as changing try-on pose, trying on garments
+dressed on another person, and displaying try-on effects in
+other forms. To be specific, some studies combined pose
+transfer [13] with virtual try-on to wear a new garment and
+change the personal pose [14, 15]. Dong H et al. [16] proposed
+MGTON and realized the pose-guided virtual try-on. Xie Z
+et al. [17] proposed PASTA-GAN to implement patch-routed
+disentanglement in unsupervised training. Cui A et al. [18]
+proposed DiOr to implement the tasks of virtual try-on, pose
+transfer, and fashion editing at the same time. Transferring the
+garment from one person to another person [19, 20] intend
+to enrich the garment form to alleviate the dependence on
+paired images. Raj A et al. [19] proposed SwapNet to first
+implement this task. Liu T et al. [21] proposed SPATT to
+arXiv:2304.08956v1 [cs.CV] 18 Apr 2023
+2
+tackle the inferring unobserved appearance by establishing
+correspondence in UV space. Lewis K M et al. [22] proposed
+TryOnGAN and improved the body shape deformation and
+skin color with a conditioned StyleGAN2. Some studies tried
+to alter the display form of the try-on effect to the highresolution image, image sequence, and video. Dong H et al.
+[23] proposed FW-GAN to realize the video virtual try-on.
+Chen C Y et al. [24] proposed FashionMirror and synthesized
+try-on image sequences conditioned on the driven-pose sequence. Choi S et al. [25] proposed VITON-HD to increase
+the try-on resolution to 1024×768. In addition, some studies
+contribute to the end-to-end model for virtual try-on, which is
+conducive to direct inference without prior. Issenhuth T et al.
+[26] proposed WUTON to avoid human parsing in the student
+model. Ge Y et al. [27] further adjusted the inputs of the
+student model and distilled the appearance flows.
+As previously discussed, achieving accurate garment try-on
+while simultaneously preserving body features is a key objective for virtual try-on research. Garment warping and content
+inference are the two main techniques utilized for achieving
+this objective. Three primary warping techniques are utilized
+for garment warping, namely STN [28], TPS deformation [29],
+and optical flow [30]. STN learns the affine transformation to
+rigidly warp garment, while TPS deformation aligns control
+points with the energy function to non-rigidly warp garment
+in a low DOF. Optical flow estimates the pixel movement
+to implement high DOF warping. When the warped garment
+still not matches the target shape precisely or the skin reexposes when trying a new category garment, it is imperative
+to infer the content of the garment and skin at the misalignment according. Previous studies [7] has relied on traditional
+CNN framework such as U-Net [31] for this task. However,
+vision transformer [32] (ViT) shows its superior in highlevel computer vision topics as its self-attention mechanism.
+Since its quadratic computation overhead, it is a challenge to
+apply it to low-level topics like the aforementioned content
+inference task. Recent studies are breaking this deadlock.
+Swin transformer [33] calculated the attention with shifted
+window; Focal Transformer [34] captured the long-range and
+short-range dependence at coarse and fine-grain, respectively.
+Restomer [35] calculated the attention across the channel.
+However, some issues are still impeding its commercial
+applications in previous studies. 1) no robust and explicit
+try-on parsing inference mechanism. Previous studies have
+attempted to infer the shape and content at one stage, without
+establishing an explicit try-on parsing inference mechanism,
+guiding to garment category alteration and arm blur at subsequent tasks; 2) unrealistic garment try-on under complex
+scenarios. It is attributed to a single-scale warping mechanism,
+the unadvanced mechanism and backbone in content inference,
+and the inexplicit joint of warping and inference, which have
+led to poor texture reservation and unrealistic try-on effect; 3)
+no specialized and well-designed skin inpainting mechanism.
+Previous studies treat garment inference and skin inpainting
+as a single task, which results in skin artifacts and skin color
+shifts. To remedy these, we propose a progressive inference
+paradigm for robust and realistic virtual try-on under complex
+situations. ‘Progressive Inference Paradigm’ embodies two key
+aspects: 1) progressive pipeline. We first leverage the try-on
+parsing inference model (TPIM) to provide shape guidance for
+downstream tasks. Subsequently, we leverage the progressive
+try-on module (PTM) and re-naked skin inpainting module
+(RSIM) to handle garment try-on and skin inpainting; 2)
+progressive try-on. We implement garment try-on by the
+coarse warping, the fined mapping, and composition in turn,
+and explicitly distinguish these tasks with alignment. The
+contribution of our paper is three-fold:
+(1) The progressive try-on for the general circumstance. We
+leverage a novel warping strategy that covers more and selects
+one for a better warping extent and texture reservation. And
+we leverage the consistency and well-designed supervision
+strategy to implement fined mapping by Restormer.
+(2) StyleGAN2-based skin inpainting. We adapt StyleGAN2
+to conduct the re-naked skin inpainting conditioned on the skin
+shape and spatial-agnostic skin features. And we introduce
+random erasure into the self-supervised training to simulate
+the actual case of arm exposure.
+(3) Experiments demonstrate that our method has state-ofthe-art performance under two challenging try-on scenarios
+compared to other baselines. PG-VTON has achieved 2.74 IS
+and 35.47 hyperIQA on the dataset [4, 5].
+II. PROGRESSIVE VIRTUAL TRY-ON
+A. Outline
+Virtual try-on intends to wear a new garment on an imaged
+person. To this end, as Fig. 1 shows, we infer a try-on parsing
+Mt conditioned the new garment mask Mg, the person
+parsing Mp, and the person pose P, and TPIM is responsible for this high-level task as Mt = T P IM (Mpr,P,Mg),
+which is described in Sec. II-B. Guided by Mt, three
+low-level tasks follow behind. It is imperative to change
+this new garment to the target try-on shape. Therefore,
+the progressive try-on module leverages three stages to implement Itg = P TM (Mtg,Mc, Ic) by warping-mappingcomposition, which is described in Sec. II-C. The re-naked
+skin inferring is essential when new skin exposes in virtual
+try-on. Thus, RSIM implements Its = RSIM (Mts, Ips) by
+adapting StyleGAN2 [36], which is described in Sec. II-D.
+Furthermore, we multiply the remaining part of the person
+parsing Mpr with the person image Ip to directly obtain the
+remaining part of the try-on image Itr. Finally, we composite
+Itg, Its, Itr to form the try-on image It.
+As symbols vary widely, we depict naming rules of symbols
+for reading convenience. 1) Symbols M, I, P are the mask
+(parsing), the image, and the pose; 2) Subscripts g, g
+0
+, p,
+t represent cases belonging to the new garment, the paired
+garment, the person, and the try-on result. The paired garment
+is the same as the dressed one on p but is in-shop form;
+3) Subscripts pg, ps, pr are the dressed garment, the upper
+skin, and the remaining part subcategories of the person; 4)
+Subscripts tg, ts, tr are same circumstances but in the tryon results; 5) The superscript ∼ is the predicted result in the
+training phase, where the ground truth is the same symbol
+without ∼.
+3
+Fig. 1. The outline of PG-VTON. TPIM infers a try-on parsing for the
+downstream tasks. And then, PTM implements the garment try-on task
+by warping-mapping-composition while RSIM realizes the skin inpainting.
+Finally, we composite all components to yield a try-on result.
+B. The Try-on Parsing Inference Module
+Try-on semantic layout matters the try-on realism. Previous
+studies [4, 5, 7] have incorporated the try-on parsing inference
+task into garment warping and composition tasks and have
+implemented these tasks in one model. This design stacks
+the shape-level and content-level tasks together and imposes
+a heavy burden on model inference capacity. Following a
+top-down paradigm, we treat the try-on parsing inference as
+an individual task, which provides a more reasonable paring
+for downstream tasks for a more realistic result. However,
+the lack of ground truth for virtual try-on poses difficulties
+in training the try-on parsing inference, and in this section,
+we will describe how to tackle it in TPIM by leveraging
+disentanglement and consistency.
+We disentangle the person parsing into three clusters: the
+dressed garment (pg), the upper skin (ps), and the remaining
+parts (pr). When trying on a new garment, it is imperative
+to accurately infer the upper skin shape both when it is
+covered by the garment and when it is not. Therefore, we have
+specifically disentangle the upper skin from other categories.
+On this basis, we represent the remaining parts and upper skin
+clusters with Mpr and P, input them along with the new
+garment mask Mg into TPIM, and then re-entangle them to
+infer a try-on parsing. To be specific, the person dense pose
+P is predicted by DensePose [37], which disentangles the
+shape and pose features of the upper skin from the person and
+disambiguates noises from the dressed garment; The person
+parsing Mp is predicted by Grapy-ML [38] conditioned on the
+person image Ip, where Mp has the background, hair, face,
+upper skin, upper garment, leg, and lower garment categories.
+Mpr is yielded by removing the garment, upper skin, and
+background categories from Mp.
+Since public datasets [4, 5] collected a person image and
+a paired garment, previous studies [4, 5, 7] trained models
+by removing the dressed garment from the person and putting
+on this paired garment again. This training paradigm enables
+models to not be robust when wearing new garments during
+testing. In contrast, we endeavor to make the input conditions
+similar during the training and testing phases, and exploit
+the cycle consistency [10] to address the supervision problem
+Fig. 2. The try-on parsing inferring module. The representations of the
+remaining part, upper skin, and garment are fed into U2-Net to predict a
+try-on parsing.
+caused by the ground truth lacking. Specifically, as Fig. 2
+shows, we first wear a new unpaired garment on the person,
+namely, TPIM infers Mt conditioned on Mpr, P, Mg. Then,
+we intend to wear the paired garment Mg
+0 on the preceding
+try-on parsing to obtain the person parsing again, namely
+TPIM infers a predicted person parsing M˜
+p conditioned on
+Mtr, P, Mg
+0 . As for supervision, we devise the objective
+function of TPIM as (1), where `1 are the L1 loss; λ1 − λ2
+are weights. The former item semi-supervises Mtr with Mpr,
+and the latter item full-supervises M˜
+p with Mp. Our training
+paradigm enables TPIM to learn how to entangle garment and
+person features and facilitates it to infer a reason parsing when
+trying on a new garment or wearing the paired garment.
+`T P IM = λ1`1 (Mtr,Mpr) + λ2`1
+
+M˜
+p,Mp
+
+(1)
+TPIM consists of two subtasks: mapping Mpr into Mtr and
+re-entangling upper skin features with garment features. To
+fulfill the high requirements for low-level feature transferring
+and high-level feature understanding, we adopt U2-Net [39]
+as the backbone of TPIM. U2-Net is capable of perceiving
+context information by fusing learned multiscale features and
+is suitable for the aforementioned task. We concatenate all
+inputs at the beginning and fed them into U2-Net, then U2-
+Net predicts results with seven channels through the Softmax
+layer.
+C. The Progressive Try-on Module
+1) The Progressive Try-on Insight: Trying on a new garment aims to match its shape to a target shape while maintaining its style. Previous studies have leveraged TPS deformation
+[29] to downsample images into coarse grids, and then aligned
+grid control points to warp the images. Fig. 3(a) shows that
+its warped result does not completely match the target shape
+due to low-DOF warping. Despite the development of highDOF warping tools, such as optical flow [30], simple warping
+4
+techniques are still inadequate in handling the try-on case, as
+shown in Fig. 3(b) where the garment is split by the arm.
+As a result, it is imperative to utilize feature mapping to
+infer the content in the red box region. To enable trying on a
+new garment feasible in the general case, it is imperative to
+employ both warping and mapping techniques. If only warping
+is exploited, it will result in misaligned problems for TPS and
+texture distortion for optical flow shown in Fig. 3(c). Similarly,
+if only mapping is exploited, high-frequency details will be
+discarded during the mapping from semantic features to pixellevel content in Fig. 3(d).
+Fig. 3. The failure case of virtual try-on. (a) (b) The TPS deformation; (c)
+The optical flow warping; (d) Only Mapping.
+Therefore, we intend to warp the garment by TPS deformation to yield coarse results. And then synthesize a fined
+result by learning such a mapping that conforms to the coarse
+result at the aligned region and infers pixel-level contents
+at the misaligned region based on learned semantic features.
+However, since the fined result still suffers from details loss
+due to the limited spatial size of feature maps, we further
+composite the coarse and fined results at the pixel level to
+facilitate the direct propagation of local details. We name
+process above as the progressive try-on. In the following
+section, we describe how to implement the progressive tryon in PTM with the coarse warping stage, the fined mapping
+stage, and the composition stage.
+As Fig. 4 shows, we supervise the PTM training with the
+paired person and garment described in Sec. II-B, namely, to
+match the shape of the paired garment I
+0
+g
+to its dressed shape
+Mpg. When the PTM has sufficient warping and mapping
+capabilities, in the testing phase, it is able to match the shape
+of a new garment Ig to the try-on shape Mtg inferred by
+TPIM.
+2) The Coarse Warping Stage: During the coarse warping
+stage, we train the model to learn TPS deformation by comparing the shape difference between Mg
+0 and Mpg, enabling
+it to warp Ig towards Mtg during the testing phase. Therefore,
+it is imperative to devise a network to capture long-range
+interactions for this coarse warping, and in this section, we
+describe how to fulfill it by employing a ViT-based model.
+As Fig. 4 shows, during the training phase, the coarse warping stage is conditioned on Mg
+0 and Mpg. To obtain shape
+feature pyramids 
+α
+i
+g
+0
+	
+i=1,2,3,4
+,
+
+α
+i
+pg	
+i=1,2,3,4
+at 0
+relu1 1
+0
+,
+0
+relu2 1
+0
+,
+0
+relu3 1
+0
+,
+0
+relu4 1
+0
+layers, we concatenate and
+fed them into the pre-trained VGG-19 model [40]. However,
+since ViT requires a constant token sequence length, we
+project every α
+i
+g
+0 and α
+i
+pg into a fixed dimension h1 × w1 × d1
+to yield α
+0
+g
+0 , α0
+pg ∈ R
+4×h1w1×d1
+. And then, we concatenate
+them and embed the position information P ∈ R
+4×h1w1×2d1
+to
+obtain a shape patch embedding sequence α ∈ R
+4×h1w1×2d1
+.
+α is defined as (2) where © is the concatenate operation.
+α = (α
+0
+g
+0©α
+0
+pg) + P (2)
+To learn token relationships and global context information
+for predicting the attention score a, we employ a cascade
+of three Transformer aggregators [41] with the self-attention
+mechanism. Rather than regressing TPS coefficients in a single
+scale [4, 5], we predict TPS coefficients at multiple scales exploiting the same TPS head. This approach enables the model
+to cover a broader range of warping circumstances without incurring significant computational costs. Specifically, we select
+four scales θ (3) ∈ R
+2×3×3
+, θ (4) ∈ R
+2×4×4
+, θ (5) ∈ R
+2×5×5
+,
+θ (6) ∈ R
+2×6×6
+, which warp the paired garment image Ig
+0
+into I
+3
+tps, I
+4
+tps, I
+5
+tps, I
+6
+tps, and warp the garment mask Mg
+0
+into M3
+tps, M4
+tps, M5
+tps, M6
+tps.
+3) The Fined Mapping Stage: Since TPS deformation
+meshes statically, the shape similarity of each scale between
+the target shape and the warped result varies depending on
+the specific virtual try-on circumstance. To establish a unique
+reference for the subsequent stages, we select the most suitable
+one from four coarse results. By this means, the coarse warping stage learns fixed four scales of TPS deformation to cover
+the general try-on circumstances as comprehensively as possible, and subsequently, the fined mapping stage dynamically
+selects an optimal one from them as a reference. We call this
+process ”covering general and select optimal”. The dynamical
+selection follows two rules: 1) the coarse result should be
+similar enough to the target shape, otherwise, it is a thorny
+problem to learn content mapping in their large misaligned
+region during the fined mapping stage; 2) the coarse result
+should have better content and texture reservation. Intuitively,
+the warping extent conflicts with the texture reservation. As
+shown in Fig. 5, the former prefers fine meshing while the
+latter prefers coarse meshing. Therefore, During the training
+phase, we compare warped results for each scale with the
+target shape and its source shape to select an optimal one
+that satisfies (3). During the testing phase, we replace Mg
+0
+with Mg.
+˜i = arg min
+i
+
+τ · avg 
+
+
+Mi
+tps − Mpg
+
+
+
+
+
++ (1 − τ ) · avg 
+
+
+Mi
+tps − Mg
+0
+
+
+
+
+
+(3)
+where ˜i is the scale index of the optimal coarse result; τ is
+the trade-off weight and equals to 0.2 in our case; avg (·) is
+the average function along the spatial dimension. Thus, the
+optimal coarse shape M˙
+tps is M˜i
+tps, and the optimal coarse
+image I˙
+tps is I
+˜i
+tps.
+Restormer [35] is employed as the backbone for the fined
+mapping stage in consideration of its integrated GAN architecture and Transformer mechanism. To sufficiently acquire the
+mapping ability from semantic features to pixel-level content
+during the training phase, the cycle consistency is incorporated
+to facilitate the training of the fined mapping stage. To be
+specific, we train the Restormer to map pixel-level conten
+5
+Fig. 4. The illustration of PTM. The coarse warping stage implements TPS deformation across four specific scales to cover a wider range of warping
+circumstances. The fined mapping stage selects an optimal warped result and utilizes content mapping to pad the misaligned regions. Subsequently, the
+composition stage concatenates the warped and mapped results at the pixel level.
+Fig. 5. The warping extent and texture reservation in multiscale TPS
+deformation.
+specifically in the misaligned region attributed to Mpg but not
+to M˙
+tps. Thus, we fed I˙
+tps and Mpg into the Restormer to
+predict a mapped result Imap. To prevent the content mapping
+is implemented at the overall shape of Mpg, I˙
+tps and Ipg are
+exploited to supervise the prediction of Imap, which facilitates
+the direct propagation of source content in the aligned region.
+As the content of the misaligned region attributed to M˙
+tps but
+not in Mpg is discarded during the aforementioned process,
+we follow the same approach, feeding Imap and M˙
+tps into the
+same Restormer to predict I¨
+tps, and supervising this prediction
+with Imap and I˙
+tps.
+During the testing phase, we feed I˙
+tps and Mtg into the
+well-trained Restormer once to predict Imap.
+4) The Composition Stage: The content mapping at the
+misaligned region suffers from information loss due to the
+spatial size limitation of semantic features. Additionally, it
+is inevitable to introduce the high-frequency details loss in
+mapping from high-level semantic features to low-level pixel
+contents. To address these issues, we propose to directly
+propagate textures and details from the optimal coarse result
+to the final result at the pixel level, leveraging a composition
+mask as a propagation carrier [5].
+Specifically, we utilized U-Net [31] to predict a composition
+mask M conditioned on I˙
+tps and Imap through the normalization layer Sigmoid. During the training phase, guided by
+M, we composite I˙
+tps and Imap to yield the final result I˜
+pg
+as (4) where  is the element-wise multiplication. The testing
+phase follows the same paradigm to obtain the final result Itg.
+I˜
+pg = Imap  M + I˙
+tps  (1 − M) (4)
+5) Objective function: We conduct joint training of three
+stages exploiting paired person and garment data. As these
+stages vary in task and objective, the error is only propagated
+within each stage, and the outputs of the previous stage are
+cloned and detached to serve as inputs for the subsequent
+stage. This training strategy facilitates error convergence in
+optimizing models.
+The objective function of the coarse warping stage `cw is
+formulated as (5) where `1 and `2 are L1 and L2 losses; λ3
+and λ4 are weights. Ground truth Mpg supervises the warped
+garment shape for each scale. Additionally, to prevent grid
+distortion, we introduce a regularization term to maintain the
+grid position between the warped grid G
+i
+tps ∈ R
+2×i×i
+and the
+source static grid G
+i ∈ R
+2×i×i
+.
+`cw = λ3
+X
+6
+i=3
+`1
+Mi
+tps,Mpg
++ λ4
+X
+6
+i=3
+`2
+
+G
+i
+tps, G
+i
+
+(5)
+In the fined mapping stage, predicted results are supervised
+at both the pixel and the perceptual levels via `1 and `vgg,
+where `vgg is calculated through the pre-trained VGG-19
+model [40] at the layers 0
+relu1 1
+0
+,
+0
+relu2 1
+0
+,
+0
+relu3 1
+0
+,
+0
+relu4 1
+0
+. As described in Sec. II-C2, I˙
+tps and Ipg supervise
+Imap with a trade-off weight ξ (set to 0.3 in our implementation), while I˙
+tps supervises I¨
+tps to ensure consistency. Thus,
+its objective function `fm is formulated as (6) where λ5 and
+λ6 are weights.
+`fm = λ5
+h
+ξ · `1
+
+Imap, I˙
+tps
++ (1 − ξ) · `1 (Imap, Ipg) + `1
+
+I¨
+tps, I˙
+tpsi
++λ6
+h
+ξ · `vgg 
+Imap, I˙
+tps
++ (1 − ξ) · `vgg (Imap, Ipg) + `vgg 
+I¨
+tps, I˙
+tpsi
+(
+6
+Fig. 6. The re-naked skin inpainting module. During the training phase, RSIM is conditioned on the erased Ips−e and target shape Mps to predict I˜ps,
+supervising with Ips. During the testing phase, RSIM can infer Its with the conditions of Ips and Mts.
+In the composition stage, we supervise the content composition at the aligned region with I˙
+tps and Ipg to facilitate
+the direct propagation of pixel contents. Additionally, we
+supervise the one at the misaligned region by Ipg. Thus, the
+objective function `cp is as (7).
+`cp = ξ ·
+
+Mpg ∩ M˙
+tps
+· `1
+
+I˜
+pg, I˙
+tps
++ (1 − ξ) · `1
+
+I˜
+pg, Ipg
+(7)
+D. Re-naked Skin Inpainting Module
+When trying on a new short-sleeve garment on an imaged
+person dressed in a long-sleeve garment, skin regions such
+as the arm or neck may become exposed, it is imperative
+to infer the exposed content for a better try-on result, which
+we refer to as the re-naked skin inpainting. Previous studies
+[4, 5] have incorporated this task in the same model as the
+content mapping of the garment, but this poses a heavy burden
+on the model due to the widely varying semantic features of
+the garment and skin, resulting in unrealistic skin inpainting.
+Conversely, when trying on a long-sleeve garment on a person
+dressed in a long-sleeve garment, we only cover parts of skins
+via Boolean operation. Previous studies [10] have combined
+skin inpainting and covering into a single task, this strategy
+enables the model to be vague about whether and where to
+inpainting during the testing phase. Therefore, in this section,
+we describe how to explicitly train the model to conduct
+the skin inpainting task via StyleGAN2 in a self-supervision
+manner.
+During the training phase, we random erase [42] the upper
+skin mask Mps to form the erased mask Mps−e and multiply
+it with Ip to yield the erased Ips−e, RSIM is trained to inpaint
+the shape Mps with the content prior of Ips−e. Specifically,
+as Fig. 6 shows, we feed Ips−e into a pre-trained VGG19 model [40] to extract its content features {ηi}i=1,2,3,4
+at the layers 0
+relu1 1
+0
+,
+0
+relu2 1
+0
+,
+0
+relu3 1
+0
+,
+0
+relu4 1
+0
+. We
+reduce the channel number of ηi by a conv1 × 1 layer and
+resize it to η
+0
+i ∈ R
+c3×1×1 by an AveragePooling layer. All
+η
+0
+i
+are concatenated together and are flattened to a 1d latent
+code z ∈ R
+1536. We further input z into a mapping network
+composed of eight FC layers to extract a spatial-agnostic
+intermediate vector w ∈ R
+1536
+.
+StyleGAN2 takes a constant as the initial input and transfers
+w into the subsequent constant feature by a learned affine
+transform and AdaIN. In contrast, we intend to transfer w into
+a target spatial to achieve spatial remodeling. Therefore, we
+input Mps into the same VGG-19 model to extract the output
+ν ∈ R
+c3×h3×w3 at the 0
+relu4 1
+0
+layer, which is exploited as
+the initial input of StyleGAN2 instead of a constant. We
+discard the noise input in the StyleGAN2 and predict I˜
+ps is
+through four AdaIN and three upsampling. In addition, we
+supervise I˜
+ps with Ips at both the pixel and perceptual level
+as (8) where λ7 and λ8 are weights.
+`RSIM = λ7`1
+
+I˜
+ps, Ips
++ λ8`vgg 
+I˜
+ps, Ips
+(8)
+In the testing phase, an initial step is to determine where
+(Mts ∪ Mps) > Mps. If the condition holds true, a re-naked
+skin inpainting is conducted to infer Its conditioned on Ips
+and Mts. For a better try-on result, a further step is to
+composite Its with Ips as (Mts − Mhs)  Its + Mhs  Ihs
+to yield a final composited one.
+III. EXPERIMENT
+A. Implementation Details
+The dataset in [4, 5] is chosen for our experiments. We
+further cleaned it to contain 11565 and 1698 image pairs in the
+training set and the test set with a resolution of 256×192. To
+simulate the real-world scenario of trying on new garments,
+we randomly shuffled the pair of garment and person. All
+experiments were conducted on a single 3090 NVIDIA GPU
+by Adam optimizer. Furthermore, it is worth noting that the
+three individual modules were trained independently, with the
+respective training settings being enumerated in Table I.
+B. Ablation Study
+1) The Try-on Parsing Inference Module: We employed a
+diverse set of backbones to infer the try-on parsing within
+the TPIM framework. They are U2-Net [39], R2U-Net [43],
+7
+TABLE I
+THE TRAINING SETTINGS OF ALL MODULES.
+Lr Iterations Batch Hyper-parameters
+TPIM 1 × e−4 72k 16 λ1 = 2.0,λ2 = 2.0
+PTM 2 × e−4 145k 4
+λ3 = 3.0,λ4 = 0.3,
+λ5 = 6.0,λ6 = 0.2
+RSIM 1 × e−5 36k 32 λ7 = 6.0,λ8 = 0.2
+ResUnet [44], U-Net [31], UNet++ [45], Attention U-Net [46],
+SETR [47], Swin-Unet [48]. Their qualitative comparison is
+shown in Fig. 7. When the person has a complicated pose
+as shown in 1-2 rows, U2-Net is capable of capturing the
+global context information of the person and garment resulting
+in reasonable try-on parsing inference. As shown in 3-5
+rows, U2-Net demonstrates superior performance in generating
+naturally-looking local regions such as cuffs. Therefore, it
+demonstrates that U2-Net is more suitable to infer the reasonable try-on parsing among these backbones.
+Fig. 7. The qualitative comparison between different backbones applied in
+TPIM.
+As Fig. 8(a) shows, we present the ablation study of
+consistency. As consistency enables TPIM aware of more tryon cases and prevents the inference process from succumbing
+to rigid patterns, TPIM is more robust when trying on a
+new garment with a style and category substantially distinct
+from its dressed one. As Fig. 8(b) shows, we have also
+verified the effect of pose forms on TPIM, exploiting the
+OpenPose method [49] to extract the joint position of the
+person as a comparison. As the OpenPose method falls short in
+representing a person shape, it weakens the inferring capacity
+of TPIM at the cross-category region, causing blur at the
+boundary between arm and cuff.
+2) The Coarse Warping Stage: Baselines This section
+endeavors to verify the function of grid regularization and
+compares ViT to CNN on learning garment warping. To be
+specific, we leverage the GMM module of CP-VTON [5] as
+the baseline of CNN, and the coarse warping stage is employed
+as our baseline. The experiment configurations are set to the
+same for a fair comparison.
+Fig. 8. The ablation study of TPIM. (a) The ablation of consistency; (b) The
+qualitative comparison between pose forms.
+Metrics We evaluate baselines from two aspects: warping
+extent and texture reservation. The warping extent is quantified
+through calculating MSE between the warped garment mask
+and the target mask predicted by PTIM. As the warping
+ground truth is unavailable, we calculate the FID between
+warped garments and original garments to represent texture
+reservation. Some qualitative examples are shown in Fig. 9,
+and the quantitative results are shown in Table II.
+Fig. 9. The qualitative comparison in the coarse warping stage.
+TABLE II
+THE QUANTITATIVE RESULTS OF THE COARSE WARPING STAGE.
+Ours w/o Regularization CNN
+MSE(Mtps,Mtg) 2016.2 1873.5 2141.6
+FID(Itps, Ig) 68.9 84.2 91.4
+Experiments demonstrate that grid regularization is capable
+of preventing texture distortion at the expense of some loss
+in the warping extent. Since the inner region has not a
+significant warping trend compared to the boundary region,
+the grid regularization further penalizes its random movement
+and suppresses distortion to promote warping coordination.
+Moreover, FID decreases by 18.17% in this case. Benefiting
+from the long-range relationship modeling of ViT, our method
+performs better in learning warping garments, where our
+MSE(Mtps,Mtg) has reduced by 12.52% compared to CNN
+warping. It demonstrates our superiority in perceiving coarsegrained shape differences.
+3) The Fined Mapping Stage: In this section, we verify
+the impact of trade-off weight τ on selecting an optimal
+coarse result, the influence of another trade-off weight ξ in
+the training supervision, and the ablation study of consistency
+and the backbone.
+8
+As described in Sec. II-C3, we have introduced the trade-off
+weight τ to balance the warping extent and texture reservation
+in selecting. We reveal the selecting trend of each scale with
+various τ in Fig. 10.
+Fig. 10. The selecting trend with trade-off weight τ.
+As τ tends to 0, the selection prefers a coarse result with
+a better texture reservation, the selection proportion of scale
+3 increases, while scale 6 one decreases. In contrast, as τ
+approaches 1, the selection proportion of scale 6 is increasing
+as a fine mesh is prone to match the shape exactly. To fulfill
+our intention of covering the general try-on circumstances,
+we expect the selection proportion of each scale to be equivalent. However, the selection proportion of scale 4 remains
+approximately 8% across different τ , we calculate the MSE
+of selection proportions for the other scales and find a value
+for τ with minimum MSE. Therefore, we recommend τ to be
+0.2.
+As described in Sec. II-C3, we supervise Imap with Ipg
+and I˙
+tps to learn a desired mapping. We verify the influence
+of trade-off weight ξ on the training from two aspects: the
+content transfer from I˙
+tps and the mapping quality, the former
+is represented by FID
+Imap, I˙
+tps
+and SSIM
+Imap, I˙
+tps
+,
+while the latter is represented by IS [50]. The qualitative cases
+are shown in Fig. 11, and the quantitative trend is in Table III.
+Fig. 11. The qualitative cases of being with different trade-off weights ξ.
+As ξ increases, I˙
+tps has more contribution to supervising
+result during the training phase, it is facilitate to transfer
+the content of I˙
+tps into Imap at the aligned region but
+suppress the content mapping at the misaligned region, resulting FID
+Imap, I˙
+tps
+and SSIM
+Imap, I˙
+tps
+increase, In
+contrast, as ξ decreases, Restormer is prone to map contents in
+TABLE III
+THE MAPPING RESULTS WITH DIFFERENT SUPERVISION TRADE-OFF
+WEIGHTS ξ.
+ξ 0.20 0.25 0.30 0.35 0.40
+FID
+Imap, I˙
+tps
+61.73 55.76 48.71 38.85 37.86
+SSIM
+Imap, I˙
+tps
+0.85 0.86 0.87 0.88 0.90
+IS 3.54 3.48 3.60 3.48 3.31
+overall shape. Therefore, we set ξ to 0.3 to obtain a trade-off
+where IS achieves a high score of 3.60.
+Furthermore, we verify the function of consistency and
+the Restormer backbone. Specifically, we employ U-Net as
+the backbone for a comparison, which has been leveraged in
+ACGPN [7]. The qualitative and quantitative results are in Fig.
+12 and Table IV, respectively.
+TABLE IV
+THE QUANTITATIVE RESULTS IN THE ABLATION OF THE FINED MAPPING
+STAGE.
+Ours w/t Consistency U-Net
+FID
+Imap, I˙
+tps
+48.71 53.73 75.20
+SSIM
+Imap, I˙
+tps
+0.87 0.82 0.86
+IS 3.60 3.60 3.44
+Fig. 12. The qualitative cases in the ablation of the fined mapping stage.
+Since consistency facilitates indirectly supervising the content propagation at the aligned region, its ablation will blur
+local details like the logo for and worsen FID and SSIM by
+10.31% and 5.75%. As the locality inductive bias, CNN relies
+on neighboring contents for mapping, rendering U-Net unsuitable for the fine mapping stage. In contrast, Restormer models
+the global interaction to learn content mapping, resulting in a
+more natural mapped result at the perception level.
+4) The Pipeline of PTM: In this section, we verify the
+necessity of three stages in PTM. As described in Sec. II-C1,
+without the fined mapping, coarse warped results do not
+match the target shape exactly. Accordingly, we emphasize
+the ablation study of the coarse warping stage and composition
+stage. The image quality and texture reservation with Ig are
+evaluated by IS and FID(Imap, Ig).
+As Fig. 13 and Table V show, the absence of the coarse
+warping stage results in a situation where the fined mapping
+9
+Fig. 13. The qualitative comparison in the ablation of pipeline. (a) Overall
+pipeline; (b) w/o the coarse warping stage.
+TABLE V
+THE QUANTITATIVE RESULTS IN THE ABLATION OF PIPELINE.
+FID(Imap, Ig) IS
+Overall Pipeline 124.16 3.59
+w/o the Composition Stage 122.17 3.60
+w/o the Coarse Warping Stage 295.87 4.47
+stage is conditioned on Ig and Mpg to predict Imap. The considerable shape difference between Mg and Mpg impedes the
+direct content transfer at the corresponding position, thereby
+enabling the model to overload at the mapping from semantic
+features to content pixels for the overall shape. Moreover, this
+absence leads to the failure of texture transfer at the pixel level
+in the subsequent composition stage.
+For the most try-on circumstances, Imap exhibits satisfactory content propagation of aligned region from I˙
+tps. In
+cases where this inheritance mechanism fails, the composition
+stage can facilitate the local details like the logo or the highfrequency information like the shadow to transfer from I˙
+tps to
+at the pixel level. It is worth mentioning that the composition
+also results in some artifacts and worsens FID and IS slightly.
+5) The Re-naked Skin Inpainting Module: We verify the
+impact of erasure extent Mps−e during the training phase
+on the performance of RSIM. Concretely, we have conducted
+a comprehensive experiment wherein we have established
+nine distinct groups of erasure extents, which are numerically
+labeled from 1 to 9 in ascending order of erasure extent.
+Subsequently, we have trained RSIM using these nine erasure
+extents and evaluated each RSIM on ten test sets by comparing
+the composited result I˜
+ps with Ips. The test set 10 has
+the highest erasure extent the same as the test set 9 and
+directly leverages the non-composited result for comparison.
+Its purpose is to evaluate the performance of RSIM under
+extreme conditions. We leverage MSE, PSNR, and SSIM as
+metrics.
+As Fig. 15 shows, the performance of RSIM on all test
+sets improves as the erasure extent in the training phase
+increases to 5. However, as the erasure extent surpasses 5, the
+performance of RSIM degrades. This observation highlights
+that erasure extent 5 is the optimal choice for training RSIM,
+which enables it to capture the general statistical distributions
+of upper skin, such as arm structure, and extract specific
+features like skin color from Ips−e. Specifically, erasure extent
+Fig. 14. The qualitative comparison of I˜ps by training with various erasure
+extents. All examples are tested on the test set 10.
+Fig. 15. RSIM is trained on various erasure extents and then is tested on
+various test sets. x-axis labels the erasure extent in the training phase, and
+y-axis labels (a) MSE results; (b) PSNR results; (c) SSIM results.
+5 involves randomly erasing a rectangle at a position with a
+probability of 0.5, where the size of rectangle is [0.02, 0.30]
+of the image area. As Fig. 14 shows, even with the limited
+training condition, various trained RSIMs still predict the highquality I˜
+ps with the same style of the ground truth but are
+different in the details like skin color and shadow.
+We also verify the impact of different backbones on this
+re-naked skin inpainting task. Concretely, we replace StyleGAN2 with its previous version StyleGAN [51] in RSIM, and
+leverage U-Net as RSIM only conditioned on Ips−e and Mps.
+The qualitative cases are shown in Fig. 16, and the quantitative
+results are in Table VI.
+Fig. 16. The qualitative cases of RSIM with various backbones.
+TABLE VI
+THE QUANTITATIVE RESULTS OF RSIM.
+Ours w/t StyleGAN U-Net
+MSE 58.64 112.14 92.40
+PSNR 31.50 28.35 29.32
+SSIM 0.98 0.97 0.97
+Since StyleGAN2 grows feature maps from coarse to fine
+and disentangles representation, it expert at synthesizing images with obvious context information like face and upper
+skin. Conversely, U-Net suffers from the low-level details
+representation drawback, and its predicted results exhibit undesirable characteristics, such as stripes and blurs, where MSE
+10
+and PSNR worsen by 57.6% and 7.0%. Since the defective
+adaption of AdaIN in StyleGAN [36], its predicted results have
+artifacts and the skin color shift.
+C. Comparison
+Baselines We compare PG-VTON with VITON [4], CPVTON [5], CP-VTON+ [8], ACGPN [7], DCTON [10], LMVTON [52], Flow-Style [11], DAFlow [12], and PL-VTON
+[53]. All baselines adopt their official implementations and
+pre-trained models. It is worth mentioning that all baselines
+were trained and tested on a common dataset.
+Metrics Since there is no ground truth in virtual try-on, it
+is challenging to evaluate the effect of virtual try-on. As in
+previous studies [10–12, 52], we compare results with half
+reference and no reference metrics. Specifically, the former
+includes SSIM and FID between It and Ip, while the latter
+includes IS [50] and hyperIQA [54]. However, it is imperative
+to be concerned about the garment style reservation, upper skin
+presentation, and the rationality of try-on parsing, which is a
+hard issue to be quantized. Therefore, we endeavor to show
+more qualitative examples in diverse situations and assess
+results by our perception.
+Instead of trying a new garment on a single person, we
+show the instances of many-to-many virtual try-on. As shown
+in Fig. 17, we select five garments as Ig where their sleeves
+vary from short to long. And we select persons who wear
+a middle-sleeve garment as Ip. By this means, our method
+shows its robustness under being with re-naked or covered
+skin.
+Fig. 17. The many-to-many virtual try-on.
+To demonstrate the state-of-the-art performance of our
+method, we compare all baselines under two challenging
+virtual try-on scenarios: (1) Trying on a garment with different
+kinds of category; (2) The person has a complex pose where
+the arm blocks partial garment.
+As shown in Fig. 18, other baselines tend to rigidly alter the
+style of Ig as Ipg for the former virtual try-on circumstance.
+The infers unrealistic representations of the sleeve and arm, resulting in an inauthentic virtual try-on experience. In contrast,
+our method adopts the semantic category disentanglement in
+TPIM to alleviate the influence of the dressed garment, and
+adopts RSIM to address the re-naked skin inpainting issue. As
+a result, our method performs better in this scenario.
+As shown in Fig. 19, other baselines fail to split the arm
+and garment from each other when they entangle together. Significant artifacts bring down the virtual try-on effect, and the
+texture reservation at the split garment part is also weakened.
+Conversely, our method is capable of inferring a reasonable
+try-on parsing even with a complex pose, and the fined
+mapping stage in PTM facilitates inferring the contents of split
+garment. Thus, our try-on result appears more authentic.
+In Table VII, our method achieves 2.74 and 35.47 points for
+IS and hyperIQA. It demonstrates that our method has state-ofthe-art performance in the overall image quality. The garment
+try-on and the color shift of the background category render
+significant variability in the similarity between It and Ig
+across various methods. In nutshell, PG-VTON is more robust
+than other baselines for the universal try-on circumstances and
+preserves garment and skin details better. Moreover, we hope
+our method will contribute to further commercial applications.
+IV. CONCLUSION
+This paper proposes a progressive virtual try-on method
+with a robust garment try-on strategy and specialized skin
+inpainting mechanism. To infer a reasonable try-on parsing,
+we disentangle the semantic categories in the person parsing
+to mitigate the influence of the original garment, and adopt
+U2Net as the backbone, which has proven to be more suitable
+for this particular task by comparison. By leveraging this
+shape guidance, we propose a garment try-on pipeline that
+adapts to the general case consisting of the coarse warping,
+the fined mapping, and composition. Specifically, we adopt
+the covering more and selecting one warping strategy and
+well-designed supervision strategy according to alignment. It
+enables the garment try-on to balance warping extent and
+texture reservation. To handle the re-naked skin inpainting in
+trying a new garment with a different category, we regulate
+StyleGAN2 with inputs of the target arm shape and spatialagnostic intermediate code of skin. Moreover, we introduce
+random erasure into the self-supervised training and verify
+the influence of erasure extent on RSIM performance. Experiments demonstrate that our method has state-of-the-art
+performance under two challenging try-on scenarios when tryon a different-category garment or having a self-occlusion
+pose.
+However, it is worth noting that PG-VTON is prior-based
+conditioned on pose and parsing. It is inevitable to introduce
+additional errors and perform preprocessing in the inference. In
+further work, we will devote ourselves to enabling our method
+to be prior-free without changing its robust performance and
+promote the further commercial application of image-based
+virtual try-on.
+11
+Fig. 18. The instances of trying on a garment with different kinds of category.
+Fig. 19. The instances of being with a complex pose.
+TABLE VII
+THE QUANTITATIVE COMPARISON BETWEEN VARIOUS METHODS.
+PG-VTON VITON CP-VTON CP-VTON+ ACGPN DCTON LM-VTON Flow-Style DAFlow PL-VTON
+IS↑ 2.74 2.51 2.60 2.72 2.61 2.60 2.72 2.64 2.69 2.54
+hyperIQA↑ 35.47 32.81 28.90 28.72 28.40 30.54 28.67 29.18 30.54 29.90
+SSIM(It, Ig)↓ 0.785 0.691 0.694 0.733 0.767 0.756 0.814 0.802 0.737 0.778
+FID(It, Ig)↓ 19.25 39.85 26.10 22.55 16.96 16.49 14.75 16.26 11.76 14.40
+REFERENCES
+[1] P. Hu, E. S.-L. Ho, and A. Munteanu, “3dbodynet: fast
+reconstruction of 3d animatable human body shape from
+a single commodity depth camera,” IEEE Transactions
+on Multimedia, vol. 24, pp. 2139–2149, 2021.
+[2] T. Zhao, S. Li, K. N. Ngan, and F. Wu, “3-d reconstruction of human body shape from a single commodity depth
+camera,” IEEE Transactions on Multimedia, vol. 21,
+no. 1, pp. 114–123, 2018.
+[3] Y. A. Sekhavat, “Privacy preserving cloth try-on using
+mobile augmented reality,” IEEE Transactions on Multimedia, vol. 19, no. 5, pp. 1041–1049, 2016.
+[4] X. Han, Z. Wu, Z. Wu, R. Yu, and L. S. Davis, “Viton:
+An image-based virtual try-on network,” in Proceedings
+of the IEEE/CVF Conference on Computer Vision and
+12
+Pattern Recognition(CVPR), 2018, pp. 7543–7552.
+[5] B. Wang, H. Zheng, X. Liang, Y. Chen, L. Lin, and
+M. Yang, “Toward characteristic-preserving image-based
+virtual try-on network,” in Proceedings of the European
+Conference on Computer Vision (ECCV), 2018, pp. 589–
+604.
+[6] R. Yu, X. Wang, and X. Xie, “Vtnfp: An image-based
+virtual try-on network with body and clothing feature
+preservation,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV), 2019, pp.
+10 511–10 520.
+[7] H. Yang, R. Zhang, X. Guo, W. Liu, W. Zuo, and P. Luo,
+“Towards photo-realistic virtual try-on by adaptively
+generating-preserving image content,” in Proceedings
+of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition (CVPR), 2020, pp. 7850–7859.
+[8] M. R. Minar, T. T. Tuan, H. Ahn, P. Rosin, and Y.-K.
+Lai, “Cp-vton+: Clothing shape and texture preserving
+image-based virtual try-on,” in CVPR Workshops, 2020.
+[9] A. Neuberger, E. Borenstein, B. Hilleli, E. Oks, and
+S. Alpert, “Image based virtual try-on network from
+unpaired data,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+(CVPR), 2020, pp. 5184–5193.
+[10] C. Ge, Y. Song, Y. Ge, H. Yang, W. Liu, and P. Luo,
+“Disentangled cycle consistency for highly-realistic virtual try-on,” in Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR),
+2021, pp. 16 928–16 937.
+[11] S. He, Y.-Z. Song, and T. Xiang, “Style-based global
+appearance flow for virtual try-on,” in Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), 2022, pp. 3470–3479.
+[12] S. Bai, H. Zhou, Z. Li, C. Zhou, and H. Yang, “Single
+stage virtual try-on via deformable attention flows,” in
+Proceedings of the European Conference on Computer
+Vision (ECCV). Springer, 2022, pp. 409–425.
+[13] N. Fang, L. Qiu, S. Zhang, Z. Wang, K. Hu, and L. Dong,
+“A novel human image sequence synthesis method by
+pose-shape-content inference,” IEEE Transactions on
+Multimedia, 2022.
+[14] L. Ma, K. Huang, D. Wei, Z.-Y. Ming, and H. Shen,
+“Fda-gan: Flow-based dual attention gan for human pose
+transfer,” IEEE Transactions on Multimedia, 2021.
+[15] B. Hu, P. Liu, Z. Zheng, and M. Ren, “Spg-vton: Semantic prediction guidance for multi-pose virtual try-on,”
+IEEE Transactions on Multimedia, vol. 24, pp. 1233–
+1246, 2022.
+[16] H. Dong, X. Liang, X. Shen, B. Wang, H. Lai, J. Zhu,
+Z. Hu, and J. Yin, “Towards multi-pose guided virtual
+try-on network,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV), 2019,
+pp. 9026–9035.
+[17] Z. Xie, Z. Huang, F. Zhao, H. Dong, M. Kampffmeyer,
+and X. Liang, “Towards scalable unpaired virtual tryon via patch-routed spatially-adaptive gan,” in Advances
+in Neural Information Processing Systems (NeurIPS),
+vol. 34, 2021, pp. 2598–2610.
+[18] A. Cui, D. McKee, and S. Lazebnik, “Dressing in order:
+Recurrent person image generation for pose transfer,
+virtual try-on and outfit editing,” in Proceedings of the
+IEEE/CVF International Conference on Computer Vision
+(ICCV), 2021, pp. 14 638–14 647.
+[19] A. Raj, P. Sangkloy, H. Chang, J. Hays, D. Ceylan,
+and J. Lu, “Swapnet: Image based garment transfer,” in
+Proceedings of the European Conference on Computer
+Vision (ECCV). Springer, 2018, pp. 679–695.
+[20] Y. Liu, W. Chen, L. Liu, and M. S. Lew, “Swapgan:
+A multistage generative approach for person-to-person
+fashion style transfer,” IEEE Transactions on Multimedia,
+vol. 21, no. 9, pp. 2209–2222, 2019.
+[21] T. Liu, J. Zhang, X. Nie, Y. Wei, S. Wei, Y. Zhao,
+and J. Feng, “Spatial-aware texture transformer for highfidelity garment transfer,” IEEE Transactions on Image
+Processing, vol. 30, pp. 7499–7510, 2021.
+[22] K. M. Lewis, S. Varadharajan, and I. KemelmacherShlizerman, “Tryongan: Body-aware try-on via layered
+interpolation,” ACM Transactions on Graphics (TOG),
+vol. 40, no. 4, pp. 1–10, 2021.
+[23] H. Dong, X. Liang, X. Shen, B. Wu, B.-C. Chen,
+and J. Yin, “Fw-gan: Flow-navigated warping gan for
+video virtual try-on,” in Proceedings of the IEEE/CVF
+International Conference on Computer Vision (ICCV),
+2019, pp. 1161–1170.
+[24] C.-Y. Chen, L. Lo, P.-J. Huang, H.-H. Shuai, and W.-H.
+Cheng, “Fashionmirror: Co-attention feature-remapping
+virtual try-on with sequential template poses,” in Proceedings of the IEEE/CVF International Conference on
+Computer Vision (ICCV), 2021, pp. 13 809–13 818.
+[25] S. Choi, S. Park, M. Lee, and J. Choo, “Viton-hd: Highresolution virtual try-on via misalignment-aware normalization,” in Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), 2021,
+pp. 14 131–14 140.
+[26] T. Issenhuth, J. Mary, and C. Calauzenes, “Do not mask `
+what you do not need to mask: a parser-free virtual
+try-on,” in Proceedings of the European Conference on
+Computer Vision (ECCV). Springer, 2020, pp. 619–635.
+[27] Y. Ge, Y. Song, R. Zhang, C. Ge, W. Liu, and
+P. Luo, “Parser-free virtual try-on via distilling appearance flows,” in Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR),
+2021, pp. 8485–8493.
+[28] M. Jaderberg, K. Simonyan, A. Zisserman, and
+k. kavukcuoglu, “Spatial transformer networks,” in
+Advances in Neural Information Processing Systems
+(NeurIPS), vol. 28. Curran Associates, Inc., 2015.
+[29] F. L. Bookstein, “Principal warps: Thin-plate splines and
+the decomposition of deformations,” IEEE Transactions
+on Pattern Analysis and Machine Intelligence, vol. 11,
+no. 6, pp. 567–585, 1989.
+[30] A. Dosovitskiy, P. Fischer, E. Ilg, P. Hausser, C. Hazirbas,
+V. Golkov, P. Van Der Smagt, D. Cremers, and T. Brox,
+“Flownet: Learning optical flow with convolutional networks,” in Proceedings of the IEEE/CVF International
+Conference on Computer Vision (ICCV), 2015, pp. 2758–
+13
+2766.
+[31] O. Ronneberger, P. Fischer, and T. Brox, “U-net: Convolutional networks for biomedical image segmentation,”
+in International Conference on Medical image computing
+and computer-assisted intervention. Springer, 2015, pp.
+234–241.
+[32] A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Unterthiner, M. Dehghani, M. Minderer, G. Heigold, S. Gelly et al., “An image is worth
+16x16 words: Transformers for image recognition at
+scale,” in International Conference on Learning Representations (ICLR), 2020.
+[33] Z. Liu, Y. Lin, Y. Cao, H. Hu, Y. Wei, Z. Zhang, S. Lin,
+and B. Guo, “Swin transformer: Hierarchical vision
+transformer using shifted windows,” in Proceedings of
+the IEEE/CVF International Conference on Computer
+Vision (ICCV), 2021, pp. 10 012–10 022.
+[34] J. Yang, C. Li, P. Zhang, X. Dai, B. Xiao, L. Yuan, and
+J. Gao, “Focal attention for long-range interactions in
+vision transformers,” in Advances in Neural Information
+Processing Systems (NeurIPS), vol. 34. Curran Associates, Inc., 2021, pp. 30 008–30 022.
+[35] S. W. Zamir, A. Arora, S. Khan, M. Hayat, F. S. Khan,
+and M.-H. Yang, “Restormer: Efficient transformer for
+high-resolution image restoration,” in Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), 2022, pp. 5728–5739.
+[36] T. Karras, S. Laine, M. Aittala, J. Hellsten, J. Lehtinen,
+and T. Aila, “Analyzing and improving the image quality
+of stylegan,” in Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR),
+2020, pp. 8110–8119.
+[37] R. A. Guler, N. Neverova, and I. Kokkinos, “Densepose: ¨
+Dense human pose estimation in the wild,” in Proceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), 2018, pp. 7297–7306.
+[38] H. He, J. Zhang, Q. Zhang, and D. Tao, “Grapy-ml:
+Graph pyramid mutual learning for cross-dataset human
+parsing,” in Proceedings of the AAAI Conference on
+Artificial Intelligence (AAAI), vol. 34, no. 07, 2020, pp.
+10 949–10 956.
+[39] X. Qin, Z. Zhang, C. Huang, M. Dehghan, O. R. Zaiane,
+and M. Jagersand, “U2-net: Going deeper with nested
+u-structure for salient object detection,” Pattern Recognition, vol. 106, p. 107404, 2020.
+[40] K. Simonyan and A. Zisserman, “Very deep convolutional networks for large-scale image recognition,” arXiv
+preprint arXiv:1409.1556, 2014.
+[41] W. Peebles, J.-Y. Zhu, R. Zhang, A. Torralba, A. A.
+Efros, and E. Shechtman, “Gan-supervised dense visual
+alignment,” in Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR),
+2022, pp. 13 470–13 481.
+[42] Z. Zhong, L. Zheng, G. Kang, S. Li, and Y. Yang,
+“Random erasing data augmentation,” in Proceedings of
+the AAAI Conference on Artificial Intelligence (AAAI),
+vol. 34, no. 07, 2020, pp. 13 001–13 008.
+[43] M. Z. Alom, C. Yakopcic, M. Hasan, T. M. Taha, and
+V. K. Asari, “Recurrent residual u-net for medical image
+segmentation,” Journal of Medical Imaging, vol. 6, no. 1,
+p. 014006, 2019.
+[44] Z. Zhang, Q. Liu, and Y. Wang, “Road extraction by deep
+residual u-net,” IEEE Geoscience and Remote Sensing
+Letters, vol. 15, no. 5, pp. 749–753, 2018.
+[45] Z. Zhou, M. M. R. Siddiquee, N. Tajbakhsh, and J. Liang,
+“Unet++: Redesigning skip connections to exploit multiscale features in image segmentation,” IEEE Transactions
+on Medical Imaging, vol. 39, no. 6, pp. 1856–1867, 2019.
+[46] O. Oktay, J. Schlemper, L. L. Folgoc, M. Lee, M. Heinrich, K. Misawa, K. Mori, S. McDonagh, N. Y.
+Hammerla, B. Kainz et al., “Attention u-net: Learning where to look for the pancreas,” arXiv preprint
+arXiv:1804.03999, 2018.
+[47] S. Zheng, J. Lu, H. Zhao, X. Zhu, Z. Luo, Y. Wang, Y. Fu,
+J. Feng, T. Xiang, P. H. Torr et al., “Rethinking semantic
+segmentation from a sequence-to-sequence perspective
+with transformers,” in Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), 2021, pp. 6881–6890.
+[48] H. Cao, Y. Wang, J. Chen, D. Jiang, X. Zhang,
+Q. Tian, and M. Wang, “Swin-unet: Unet-like pure transformer for medical image segmentation,” arXiv preprint
+arXiv:2105.05537, 2021.
+[49] Z. Cao, T. Simon, S.-E. Wei, and Y. Sheikh, “Realtime multi-person 2d pose estimation using part affinity
+fields,” in Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), 2017,
+pp. 7291–7299.
+[50] T. Salimans, I. Goodfellow, W. Zaremba, V. Cheung,
+A. Radford, and X. Chen, “Improved techniques for training gans,” in Advances in Neural Information Processing
+Systems (NeurIPS), 2016, pp. 2234–2242.
+[51] T. Karras, S. Laine, and T. Aila, “A style-based generator architecture for generative adversarial networks,” in
+Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition (CVPR), 2019, pp. 4401–
+4410.
+[52] G. Liu, D. Song, R. Tong, and M. Tang, “Toward realistic
+virtual try-on through landmark guided shape matching,”
+in Proceedings of the AAAI Conference on Artificial
+Intelligence (AAAI), vol. 35, no. 3, 2021, pp. 2118–2126.
+[53] X. Han, S. Zhang, Q. Liu, Z. Li, and C. Wang, “Progressive limb-aware virtual try-on,” in Proceedings of
+the 30th ACM International Conference on Multimedia,
+2022, pp. 2420–2429.
+[54] S. Su, Q. Yan, Y. Zhu, C. Zhang, X. Ge, J. Sun, and
+Y. Zhang, “Blindly assess image quality in the wild
+guided by a self-adaptive hyper network,” in Proceedings
+of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition (CVPR), 2020, pp. 3667–3676.
+14
+Naiyu Fang received the B.Eng. degree in the
+School of Mechanical Engineering from Dalian University of Technology, Dalian, China, in 2019. He is
+currently a Ph.D. candidate in the School of Mechanical Engineering, Zhejiang University, China.
+His research interests include virtual try-on and 3d
+human body reconstruction.
+Lemiao Qiu received the Ph.D. degree from the Department of Mechanical Engineering, Zhejiang University, Hangzhou, China, in 2008. He is currently an
+Associate Professor at the Department of Mechanical Engineering, Zhejiang University, China. His
+research interests include computer graphics, virtual
+try-on, and production informatization.
+Shuyou Zhang is currently a Distinguished Professor and a Ph.D. Supervisor at the Department of Mechanical Engineering, Zhejiang University, China.
+His research interests include computer graphics,
+computer vision, and product digital design.
+Zili Wang received the Ph.D. degree from the
+Department of Mechanical Engineering, Zhejiang
+University, Hangzhou, China in 2018. He is currently
+Research Associate at the Department of Mechanical
+Engineering, Zhejiang University, Hangzhou, China.
+His research interests include computer-aided design
+and computer graphics.
+Kerui Hu received the B.Eng. degree in the School
+of China University of Mining and Technology,
+Xuzhou, China, in 2018. He is currently a Ph.D.
+candidate in the School of Mechanical Engineering,
+Zhejiang University, China. His research interests
+include data mining and collaborative filtering.
+
+CP-VTON+: Clothing Shape and Texture Preserving Image-Based Virtual
+Try-On
+Matiur Rahman Minar1
+, Thai Thanh Tuan1
+, Heejune Ahn1
+, Paul L. Rosin2
+, and Yu-Kun Lai2
+1Seoul National University of Science and Technology, South Korea
+2Cardiff University, UK
+Abstract
+Recently proposed Image-based virtual try-on (VTON)
+approaches have several challenges regarding diverse human poses and clothing styles. First, clothing warping networks often generate highly distorted and misaligned warped clothes, due to the erroneous clothingagnostic human representations, mismatches in input images for clothing-human matching, and improper regularization transform parameters. Second, blending networks
+can fail to retain the remaining clothes due to the wrong
+representation of humans and improper training loss for
+the composition-mask generation. We propose CP-VTON+
+(Clothing shape and texture Preserving VTON) to overcome
+these issues, which significantly outperforms the state-ofthe-art methods, both quantitatively and qualitatively.
+1. Introduction
+Due to the difficulty and high costs in 3D model based
+approaches, 2D image-based VTON technologies are getting popular nowadays. Among different system settings in
+the previous works, one with an image of try-on clothing
+and a target human image has been considered practical in
+many works [1, 4]. A common processing pipeline for this
+setting has two stages: first, the try-on clothing is warped to
+align with the target human (called the Geometric Matching
+Module (GMM)), and then the warped clothing is blended
+with the target human image (called the Try-On Module
+(TOM). We also use this setting.
+Previous works demonstrated the feasibility of imagebased VTON technologies. However, as Figure 1 shows,
+they work fairly well for the cases of mono-colored shortsleeved clothes and up-front poses, but not for cases with
+rich-textured or long-sleeved clothing, or a diversely posed
+human. We reveal the origins of these problems and redesign the pipeline by employing better input representations and using improved training cost functions. First, we
+correct the erroneous clothing-agnostic human representation: wrong labeling of the chest area in human parsing
+maps, and omission of clothing from reserved areas in the
+human representation. Second, we observe the problems
+in clothing warping networks: the unbalanced geometric
+matching inputs and training loss function. Finally, we improve the composition mask using the input clothing mask
+and a concrete loss function. Our proposed system, named
+CP-VTON+ after the baseline CP-VTON [4], outperforms
+CP-VTON by large margins, in both perceptible and subjective evaluations.
+2. Related Works
+VITON [1] first proposed the system setting and dataset
+of an in-shop clothing and a target human image. VITON
+also first used the two stage architecture (a warping and a
+blending module) and CP-VTON [4] refined VITON for
+improving the clothing texture transfer, where the clothing
+area is blended with the warped clothing generated from the
+original clothing image, not reconstructing through a decoder network. We include [1, 4] in our comparisons, since
+their implementations are publicly available.
+3. CP-VTON+
+3.1. Overview
+Our new VTON pipeline is designed based on the
+pipeline structure of CP-VTON [4], hence named CPVTON+. Figure 2 illustrates the architecture.
+3.1.1 Clothing Warping Stage
+The improvement of the GMM stage is in three aspects.
+First, it is crucial to obtain the complete target body silhouette area from the target human image. However, in the
+VITON dataset, the neck and bare chest area is wrongly la1
+Cloth Target VITON[1] CP-VTON[4] CP-VTON+(Ours)
+Figure 1. Qualitative evaluation of image-based VTONs (new clothing try-on): left to right, input pairs, VITON results, CP-VTON results,
+CP-VTON+ (ours) results). We present examples of different type of clothes here: from sleeveless to short, half and long sleeve, with
+different human body shapes/poses. Our method correctly preserves original clothing shapes, textures, and target human reserved regions.
+beled as background and the body shape is often distorted
+by hair occlusion. We correct this as follows: A new label ‘skin’ is added to the label set, and then the label of
+the corresponding area is restored from the wrong label,
+‘background’, considering the original human image and
+joint locations. The skin-labeled area is now included in
+the silhouette in the human representation. To recover the
+hair occlusion over the body, first the hair occlusion areas
+are identified as the intersection of the convex contour of
+the upper clothing and the hair-labeled area, and the intersections are re-labeled as upper cloth.
+Second, the CP-VTON GMM network is built on CNN
+geometric matching [2]. Whereas the CNN geometric
+matching uses a pair of color images, CP-VTON GMM
+inputs are binary mask information, silhouette, and joint
+heatmap and the colored try-on clothing. Since the colored
+texture from try-on clothing does not help in the matching
+process, our GMM uses a clothing mask MCi
+instead of
+colored Ci
+, i.e.,
+θ = fθ(fH(Ht), fC (MCi
+)) (1)
+Finally, the experiments with existing methods reveal
+that warped clothing is often severely distorted. We could
+not clearly determine the reason, but can conclude that the
+estimation of the TPS parameters needs regularization, taking into account the restriction of clothing textures. Our grid
+warping regularization is defined on the grid deformation
+and not directly on the TPS parameters for easy visualization and understanding, so as to not have too much different
+warping from the before and next grid-gap in equation 3.
+L
+CP −V T ON+
+GMM = λ1 · L1(Cwarped, ICt
+) + λreg · Lreg (2)
+Lreg(Gx, Gy) = X
+i=−1,1
+X
+x
+X
+y
+|Gx(x + i, y) − Gx(x, y)|
+X
+j=−1,1
+X
+x
+X
+y
+|Gx(x, y + j) − Gx(x, y)|
+(3)
+3.1.2 Blending Stage
+Improvements to the TOM stage are three fold. Firstly, in
+order to retain the other human components other than the
+target clothing area, all the other areas, e.g., face, hair, lower
+clothes and legs are added to the human representation input of TOM. Secondly, in the mask loss term in the TOM
+loss function, we replace the Composition Mask with the
+supervised ground truth mask for a strong alpha mask.
+L
+CP −V T ON+
+T OM = λ1||I0 − IGT ||1 + λV GGLV GG
++λmask||MGT − Mo||1
+(4)
+Finally, we added the binary mask of warped clothing to
+the TOM network input, since TOM could not recognize
+the white clothing area as being the same as the in-shop
+clothing image background.
+2
+Figure 2. Full pipeline of our proposed CP-VTON+.
+4. Experiments and Results
+4.1. Implementation Details
+We extended the existing CP-VTON implementation1
+as described above. We added automatic refinement for
+segmentation. For training, we used similar setting as [4]
+for comparison, i.e., λ1 = λV GG = λmask = 1 and
+λreg = 0.5. We used the VITON clothing-human pair
+dataset for all experiments. We trained both networks for
+200K steps with batch size 4, with the Adam optimizer with
+β1 = 0.5 and β2 = 0.999. The learning rate was first fixed
+at 0.0001 for 100K steps and then linearly decays to zero
+for the remaining steps.
+4.2. Results and Comparison
+Table 1 shows numerical comparison between the baseline CP-VTON [4] and different versions of our proposed
+CP-VTON+. We use IoU, SSIM [5] and Learned Perceptual
+Image Patch Similarity (LPIPS) [6] metrics for the same
+clothing retry-on cases (when we have ground truths) for
+the warping stage and the blending stage, respectively. The
+original target human image is used as the reference image for SSIM and LPIPS (lower score means better), and
+the parsed segmentation area for the current upper clothing
+is used as the IoU reference. For different clothing try-on
+(where no ground truth is available), we used the Inception
+Score (IS) [3]. Our proposed CP-VTON+ outperforms CP1https://github.com/sergeywong/cp-vton
+VTON on all measures.
+We present visual comparison among VITON [1] and
+CP-VTON [4] (please refer to Figure 1). Subjective evaluation shows significant visual improvements: 1) the warped
+clothes do not have severe distortion, 2) the lower clothes
+are retained, 3) the new clothing collar shape is not affected
+by the current clothing’s collar shape, and 4) clothing textures such as logos and patterns are clearer.
+4.3. Ablation Study
+In figure 3, we highlight the impacts of the identified
+problems and improvements of the proposed method stepby-step through the ablation study of CP-VTON+. First
+and second columns are target humans and try-on clothes,
+respectively. The third column has the CP-VTON [4] results. The fourth column shows when unchanged clothes
+and body parts are added to the reserved region inputs of
+TOM, retaining the original pants texture. The fifth column
+is when the mask loss function of TOM is updated with the
+target clothing area, making the texture and color of clothing sharp and vivid. Finally, the sixth/last column is when
+the body masks are updated, where the skin areas wrongly
+labeled as background and hair are removed from the reserved region input of GMM, having GMM with a better
+clothing-and-hair-agnostic human representation.
+4.4. Discussions
+Although CP-VTON+ improves the quality, it does not
+always produce successful results for long sleeved, com3
+Method Warped Blended
+(IoU) SSIM LPIPS IS (mean ± std.)
+CP-VTON[4] 0.7898 0.7798 0.1397 2.7809 ± 0.0594
+CP-VTON+ (w/o GMM
+regularization & mask loss) 0.7602 0.8076 0.1263 3.0735 ± 0.0531
+CP-VTON+ (w/o GMM
+mask loss) 0.7920 0.8077 0.1231 3.1312 ± 0.0837
+CP-VTON+ (Ours) 0.8425 0.8163 0.1144 3.1048 ± 0.1068
+Table 1. Quantitative comparison results between the state-of-the-art CP-VTON [4] and our proposed CP-VTON+. All evaluation metrics
+are measured on the testing dataset from Han et al. [1], where input pairs are same-clothing for IoU SSIM [5] & LPIPS [6], and differentclothed for IS [3].
+Figure 3. Ablation study of CP-VTON+. From left to right column: target humans, try-on clothes, CP-VTON, with corrected human representation in TOM, warped clothing mask and mask loss
+function updated, and CP-VTON+ (with corrected human representation in GMM)
+plicated shaped, or textured clothing, and target humans
+with complex postures. Figure 4 shows two typical failure cases due to the clothing warping, where arms cover the
+body area, warped clothing does not match the human body,
+and TOM fails in hiding the warping error. Any 2D transform including the non-rigid TPS algorithm cannot handle
+the strong 3D deformations of clothing. Also, 3D poses induce self-occlusions. The TOM network should recognize
+the clothing area and skin areas, like naked arms. Sometimes, even for simple poses, warped clothing shows unrealistic results. Additionally, better human parsing is crucial
+for better try-on results.
+5. Conclusion
+We proposed a refined image-based VTON system, CPVTON+, solving issues in previous approaches: errors in
+human representation and the dataset, network design and
+loose cost function. Even though CP-VTON+ improves the
+performance, we find that a 2D image-based approach has
+inherent limitations for coping with diversely posed target
+input clothing target human warped try-on
+Figure 4. Failures of our CP-VTON+
+human cases. Therefore, the application would be limited
+to simple clothing and standard posed target humans. For
+more diverse cases, 3D reconstruction would be more suitable.
+References
+[1] Xintong Han, Zuxuan Wu, Zhe Wu, Ruichi Yu, and Larry S.
+Davis. Viton: An image-based virtual try-on network. CVPR,
+pages 7543–7552, 2018. 1, 2, 3, 4
+[2] Ignacio Rocco, Relja Arandjelovic, and Josef Sivic. Convolutional neural network architecture for geometric matching. In
+CVPR, pages 6148–6157, 2017. 2
+[3] Tim Salimans, Ian Goodfellow, Wojciech Zaremba, Vicki
+Cheung, Alec Radford, and Xi Chen. Improved techniques
+for training gans. In NeurIPS, pages 2234–2242, 2016. 3, 4
+[4] Bochao Wang, Hongwei Zhang, Xiaodan Liang, Yimin Chen,
+Liang Lin, and Meng Yang. Toward characteristic-preserving
+image-based virtual try-on network. In ECCV, 2018. 1, 2, 3,
+4
+[5] Zhou Wang, Alan C Bovik, Hamid R Sheikh, and Eero P Simoncelli. Image quality assessment: from error visibility to
+structural similarity. IEEE TIP, 13(4):600–612, 2004. 3, 4
+[6] Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shechtman,
+and Oliver Wang. The unreasonable effectiveness of deep features as a perceptual metric. In CVPR, pages 586–595, 2018.
+3, 4
+4
