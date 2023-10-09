@@ -3,3 +3,5 @@
 # Python Streamlit
 __pycache__/
 .secrets.toml
+# Streamlit secrets
+.streamlit/secrets.toml
