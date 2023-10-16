@@ -11,7 +11,7 @@ co = cohere.Client(st.secrets["COHERE_API_KEY"])
 # with open('content1.txt', 'r', encoding='utf-8') as file:
 #     text = file.read()
 st.header('SSW-Summarizer')
-st.write('High End Summarizer Using Cohere Endpoints - Summarize any documents')
+st.write('High End Summarizer Using Cohere Endpoints - Summarize any documents upt 1 Million words')
 
 
 def split_text_into_sentences(text):
