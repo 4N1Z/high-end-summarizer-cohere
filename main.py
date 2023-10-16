@@ -11,7 +11,7 @@ co = cohere.Client(st.secrets["COHERE_API_KEY"])
 # with open('content1.txt', 'r', encoding='utf-8') as file:
 #     text = file.read()
 st.header('SSW-Summarizer')
-st.write('High End Summarizer Using Cohere Endpoints - Summarize any documents upt 1 Million words')
+st.write('High End Summarizer Using Cohere Endpoints - Summarize any documents upto 1 Million words')
 
 
 def split_text_into_sentences(text):
@@ -127,7 +127,7 @@ def summarzerMain(text) :
 
             end_time = time.time()  
             elapsed_time = ( end_time - start_time )/60
-            st.write("Summarization took: ", elapsed_time, " minutes.")                
+            st.write("Summarization took: ", round(elapsed_time, 2), " minutes.")                
 
             # st.write(response)
             print("PHASE 2 Completed______________________")
