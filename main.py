@@ -70,7 +70,7 @@ def summarzerMain(text) :
             print("PHASE 2 ONGOING")
 
             chatResponses = ' '.join(responses)
-            st.write('Word Count for chatResponses:', len(chatResponses))
+            # st.write('Word Count for chatResponses:', len(chatResponses))
 
             summarization_chunks = math.ceil(len(chatResponses) / 6000)
             generated_responses = []
@@ -110,7 +110,7 @@ def summarzerMain(text) :
 
             prompt_template3 = (
                     "Summarize the given content into a response of multiple paragraphs with `MORE THAN 500 WORDS`. "
-                    "The content is: " + final_generated_response + "Give Response in a VERY EFFICIENT FORMAT, Preferably in BULLETS"
+                    "The content is: " + final_generated_response + "Give Response in a VERY EFFICIENT FORMAT, Preferably in BULLETS, Dont give any other information other than the summary."
                 )
             
             final_generation = co.generate(
@@ -127,7 +127,7 @@ def summarzerMain(text) :
 
             end_time = time.time()  
             elapsed_time = ( end_time - start_time )/60
-            st.write(f"Summarization first part took {elapsed_time:.2f} minutes.")                
+            st.write("Summarization took: ", elapsed_time, " minutes.")                
 
             # st.write(response)
             print("PHASE 2 Completed______________________")
@@ -135,7 +135,7 @@ def summarzerMain(text) :
             
             prediction_text = final_generation.generations[0].text
             st.write(f'Prediction: {prediction_text}')
-            st.write('Word Count:', len(final_generation))
+            st.write('Word Count:', len(prediction_text))
 
             print("___________ END __________")
             # count words in summary
