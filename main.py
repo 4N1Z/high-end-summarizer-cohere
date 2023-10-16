@@ -21,30 +21,35 @@ def split_text_into_sentences(text):
 
 def summarzerMain(text) :
     responses = []
-    token_length = len(text)
+
     text1 = text[:len(text)//2]
     text2 = text[len(text)//2:]
     total_chunks = math.ceil(len(text) / 5000)
 
-    summarizer_prompt  = "You should summarize the given content into meanigfull summaries.At the end give important keywords in JSON format  "
+    summarizer_prompt  = "You should summarize the given content into meanigfull summaries, withour loosing the context."
 
     # Add a header for the summary
     with st.sidebar:
         if st.button('Generate Summary'):
             print("___________ START __________")
+
             start_time = time.time()
-            #when we click generate, i need to summarize text1 and text2 seperately
+
             with st.spinner('Generating response...'):
+
+                if len(text) > 10000:
+                    st.write('Chunking the text into 5000 tokens each... \n Total chunks :', total_chunks)
+                    st.write("Make a coffee, this might take a while...")   
+
                 # Split the text into chunks of 5000 tokens and process each chunk
                 for i in range(total_chunks):
                     start_index = i * 5000
                     end_index = (i + 1) * 5000
                     chunk_text = text[start_index:end_index]
-
                     # Process the current chunk
                     response = co.summarize( 
                         text=chunk_text,
-                        length='long',
+                        length='short',
                         format='bullets',
                         model='summarize-xlarge',
                         additional_command=summarizer_prompt,
@@ -55,9 +60,8 @@ def summarzerMain(text) :
                     responses.append(response.summary)
                     print("CHUNK", i, "COMPLETED")
                     print(response.summary)
-            end_time = time.time()  
-            elapsed_time = end_time - start_time
-            print(f"Summarization took {elapsed_time:.2f} seconds.")                
+
+
 
             # Add a header for the summary
             st.markdown("<h3 style='color: green;'>Summary:</h3>", unsafe_allow_html=True)
@@ -66,26 +70,72 @@ def summarzerMain(text) :
             print("PHASE 2 ONGOING")
 
             chatResponses = ' '.join(responses)
-            prompt_template = "Enlarge the given content into n number of paragraph response of `MORE THAN 500 WORDS` each. The content is : " + ' ' + chatResponses + "Give Response in a VERY EFFICIENT FORMAT, Preferabbly in BULLETS"
-            response = co.generate(
+            st.write('Word Count for chatResponses:', len(chatResponses))
+
+            summarization_chunks = math.ceil(len(chatResponses) / 6000)
+            generated_responses = []
+
+            # Split the chatResponses into chunks of 5000 tokens and process each chunk
+            for i in range(summarization_chunks):
+                start_index = i * 6000
+                end_index = (i + 1) * 6000
+                generated_chunk_text = chatResponses[start_index:end_index]
+
+                # Construct the prompt template for the current chunk
+                prompt_template2 = (
+                    "Summarize the given content into n number of paragraph response of each. "
+                    "The content is: " + generated_chunk_text + "Give Response in a VERY EFFICIENT FORMAT, Preferably in BULLETS"
+                )
+
+                # Generate response for the current chunk
+                generate_response = co.generate(
+                    model='command',
+                    prompt=prompt_template2,
+                    max_tokens=400,
+                    temperature=0.3,
+                    k=0,
+                    stop_sequences=[],
+                    truncate='END',
+                    return_likelihoods='NONE'
+                )
+                generated_responses.append(generate_response.generations[0].text)
+                print("CHUNK-GENERATION :- ", i, "COMPLETED")
+            
+            # Extract the text from the generated responses
+            # final_generated_text = [response.text for response in generated_responses]
+            # st.write("WORD LENFTH OF GENERATIONS : ", len(generated_responses), "\n")
+            # st.write("GENERATIONS : ", generated_responses, "\n")
+            # st.write(final_generated_text)
+            final_generated_response = ' '.join(generated_responses)
+
+            prompt_template3 = (
+                    "Summarize the given content into a response of multiple paragraphs with `MORE THAN 500 WORDS`. "
+                    "The content is: " + final_generated_response + "Give Response in a VERY EFFICIENT FORMAT, Preferably in BULLETS"
+                )
+            
+            final_generation = co.generate(
                 model='command',
-                prompt= prompt_template,
-                num_generations = 3,
-                max_tokens= 400,
+                prompt=prompt_template3,
+                num_generations=3,
+                max_tokens=400,
                 temperature=0.3,
                 k=0,
                 stop_sequences=[],
+                truncate='END',
                 return_likelihoods='NONE'
             )
-            
-            
+
+            end_time = time.time()  
+            elapsed_time = ( end_time - start_time )/60
+            st.write(f"Summarization first part took {elapsed_time:.2f} minutes.")                
+
             # st.write(response)
             print("PHASE 2 Completed______________________")
-            print('Prediction: {}'.format(response.generations[0].text))
+            # print('Prediction: {}'.format(response.generations[0].text))
             
-            prediction_text = response.generations[0].text
+            prediction_text = final_generation.generations[0].text
             st.write(f'Prediction: {prediction_text}')
-            st.write('Word Count:', len(prediction_text.split()))
+            st.write('Word Count:', len(final_generation))
 
             print("___________ END __________")
             # count words in summary
