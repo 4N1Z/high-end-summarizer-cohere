@@ -3,6 +3,8 @@ import streamlit as st
 from nlpSummarizer import formattingForSummarizer
 import PyPDF2
 import re
+import math
+import time
 
 co = cohere.Client(st.secrets["COHERE_API_KEY"]) 
 
@@ -18,42 +20,54 @@ def split_text_into_sentences(text):
     return sentences
 
 def summarzerMain(text) :
-  responses = []
-  text1 = text[:len(text)//2]
-  text2 = text[len(text)//2:]
+    responses = []
+    token_length = len(text)
+    text1 = text[:len(text)//2]
+    text2 = text[len(text)//2:]
+    total_chunks = math.ceil(len(text) / 5000)
 
-  summarizer_prompt  = "You should summarize the given content into meanigfull summaries.At the end give important keywords in JSON format  "
+    summarizer_prompt  = "You should summarize the given content into meanigfull summaries.At the end give important keywords in JSON format  "
 
-  # Add a header for the summary
-  with st.sidebar:
-      if st.button('Generate Summary'):
-        print("___________ START __________")
-        #when we click generate, i need to summarize text1 and text2 seperately
-        with st.spinner('Generating response...'):
-          for text in [text1, text2]:
-            response = co.summarize( 
-                  text=text,
-                  length='long',
-                  format='bullets',
-                  model='summarize-xlarge',
-                  additional_command= summarizer_prompt,
-                  temperature=0.3,
-            ) 
-            print(response)
-            responses.append(response.summary)
-            #append the reponses list to a string
-            
-            print("PHASE 1 ONGOINGGGG")
+    # Add a header for the summary
+    with st.sidebar:
+        if st.button('Generate Summary'):
+            print("___________ START __________")
+            start_time = time.time()
+            #when we click generate, i need to summarize text1 and text2 seperately
+            with st.spinner('Generating response...'):
+                # Split the text into chunks of 5000 tokens and process each chunk
+                for i in range(total_chunks):
+                    start_index = i * 5000
+                    end_index = (i + 1) * 5000
+                    chunk_text = text[start_index:end_index]
 
-          # Add a header for the summary
-          st.markdown("<h3 style='color: green;'>Summary:</h3>", unsafe_allow_html=True)
-          # After summarizing add these responses into co.chat and make it upto 300 words
-          print("PHASE 1 Completed______________________")
-          print("PHASE 2 ONGOING")
+                    # Process the current chunk
+                    response = co.summarize( 
+                        text=chunk_text,
+                        length='long',
+                        format='bullets',
+                        model='summarize-xlarge',
+                        additional_command=summarizer_prompt,
+                        temperature=0.3,
+                    ) 
 
-          chatResponses = ' '.join(responses)
-          prompt_template = "Enlarge the given content into n number of paragraph response of `MORE THAN 500 WORDS` each. The content is : " + ' ' + chatResponses + "Give Response in a VERY EFFICIENT FORMAT, Preferabbly in BULLETS"
-          response = co.generate(
+                    # Append the summary to the responses list
+                    responses.append(response.summary)
+                    print("CHUNK", i, "COMPLETED")
+                    print(response.summary)
+            end_time = time.time()  
+            elapsed_time = end_time - start_time
+            print(f"Summarization took {elapsed_time:.2f} seconds.")                
+
+            # Add a header for the summary
+            st.markdown("<h3 style='color: green;'>Summary:</h3>", unsafe_allow_html=True)
+            # After summarizing add these responses into co.chat and make it upto 300 words
+            print("PHASE 1 Completed______________________")
+            print("PHASE 2 ONGOING")
+
+            chatResponses = ' '.join(responses)
+            prompt_template = "Enlarge the given content into n number of paragraph response of `MORE THAN 500 WORDS` each. The content is : " + ' ' + chatResponses + "Give Response in a VERY EFFICIENT FORMAT, Preferabbly in BULLETS"
+            response = co.generate(
                 model='command',
                 prompt= prompt_template,
                 num_generations = 3,
@@ -63,20 +77,20 @@ def summarzerMain(text) :
                 stop_sequences=[],
                 return_likelihoods='NONE'
             )
-          
-          
-          # st.write(response)
-          print("PHASE 2 Completed______________________")
-          print('Prediction: {}'.format(response.generations[0].text))
-          
-          prediction_text = response.generations[0].text
-          st.write(f'Prediction: {prediction_text}')
-          st.write('Word Count:', len(prediction_text.split()))
+            
+            
+            # st.write(response)
+            print("PHASE 2 Completed______________________")
+            print('Prediction: {}'.format(response.generations[0].text))
+            
+            prediction_text = response.generations[0].text
+            st.write(f'Prediction: {prediction_text}')
+            st.write('Word Count:', len(prediction_text.split()))
 
-          print("___________ END __________")
-          # count words in summary
-          # count = len(response.summary.split())
-          # st.write('Word Count:', count)
+            print("___________ END __________")
+            # count words in summary
+            # count = len(response.summary.split())
+            # st.write('Word Count:', count)
 
 
 def main ():
@@ -102,6 +116,8 @@ def main ():
         # Split text into sentences
         sentences = split_text_into_sentences(pdf_text)
         st.write('Word Count:', len(pdf_text.split()))
+        # st.write(math.ceil(len(pdf_text) / 5000))
+        # st.write(math.ceil(len(pdf_text.split()) / 5000))
 
         # Display limited content with "Read More" functionality
         num_displayed_sentences = 2
