@@ -37,9 +37,16 @@ def summarzerMain(text) :
 
             with st.spinner('Generating response...'):
 
-                if len(text) > 10000:
-                    st.write('Chunking the text into 5000 tokens each... \n Total chunks :', total_chunks)
-                    st.write("Make a coffee, this might take a while...")   
+                st.write(' \n Total chunks :', total_chunks)
+                if len(text) >= 10000 and len(text) <= 50000:
+                    st.write("Make a coffee, take a sip and come back...") 
+
+                if len(text) >= 50000 and len(text) <= 100000:
+                    st.write("Watch an anime, finish a episode ...") 
+
+                if len(text) >= 100000 :
+                    st.write("Go for a movie, come back during the intervals ...")
+                
 
                 # Split the text into chunks of 5000 tokens and process each chunk
                 for i in range(total_chunks):
