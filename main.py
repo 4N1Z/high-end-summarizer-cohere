@@ -24,6 +24,11 @@ def summarzerMain(text) :
 
     text1 = text[:len(text)//2]
     text2 = text[len(text)//2:]
+    # start_index = 15 * 5000
+    # end_index = (15 + 1) * 5000
+    # st.write(text[start_index:end_index])
+    # st.write(text)
+    
     total_chunks = math.ceil(len(text) / 5000)
 
     summarizer_prompt  = "You should summarize the given content into meanigfull summaries, withour loosing the context."
@@ -49,7 +54,7 @@ def summarzerMain(text) :
                 
 
                 # Split the text into chunks of 5000 tokens and process each chunk
-                for i in range(total_chunks):
+                for i in range(total_chunks - 1):
                     start_index = i * 5000
                     end_index = (i + 1) * 5000
                     chunk_text = text[start_index:end_index]
